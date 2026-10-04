@@ -275,21 +275,23 @@ function injectLayoutAuthCheck() {
 
   const authCheck = `
   // EdgeOne SSR auth guard
+  // 2026-10-04 修：EdgeOne 不注入 x-pathname / x-invoke-path（全仓库没人设这两个头），
+  // 旧版用 referer 兜底、再兜底成 '/' → 连 /login 自己都被判成"需要登录的页面" →
+  // 浏览器整站 ERR_TOO_MANY_REDIRECTS。
+  // 现在：只有平台真的给出路径头时才做页面级拦截；拿不到路径就放行
+  // （页面可见性交给客户端与 /api 的 edge middleware，不再用猜出来的路径决定跳转）。
   const __h = await headers();
-  let __path = __h.get('x-pathname') || __h.get('x-invoke-path') || '';
-  if (!__path) {
-    const __ref = __h.get('referer') || '';
-    try { if (__ref) __path = new URL(__ref).pathname; } catch {}
-  }
-  if (!__path) __path = '/';
+  const __path = __h.get('x-pathname') || __h.get('x-invoke-path') || '';
 
-  const __skipPaths = ${pageSkipPaths};
-  if (!__skipPaths.some((p) => __path.startsWith(p))) {
-    const __cookieStore = await cookies();
-    const __authCookie = __cookieStore.get('user_auth') || __cookieStore.get('auth');
-    if (!__authCookie) {
-      const __search = __h.get('x-search') || '';
-      redirect('/login?redirect=' + encodeURIComponent(__path + __search));
+  if (__path) {
+    const __skipPaths = ${pageSkipPaths};
+    if (!__skipPaths.some((p) => __path.startsWith(p))) {
+      const __cookieStore = await cookies();
+      const __authCookie = __cookieStore.get('user_auth') || __cookieStore.get('auth');
+      if (!__authCookie) {
+        const __search = __h.get('x-search') || '';
+        redirect('/login?redirect=' + encodeURIComponent(__path + __search));
+      }
     }
   }
 `;
